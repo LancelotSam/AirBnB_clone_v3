@@ -1,10 +1,14 @@
 #!/usr/bin/python3
 """places"""
-from api.v1.views import app_views
-from flask import jsonify, abort, request
+# import teh required modules
+from flask import abort, jsonify, request
+# import the required models
 from models import storage
+from api.v1.views import app_views
 from models.city import City
 from models.place import Place
+from models.user import User
+from models.amenity import Amenity
 from datetime import datetime
 import uuid
 
@@ -73,6 +77,55 @@ def create_place(city_id):
     storage.save()
     places.append(new_place.to_dict())
     return jsonify(places[0]), 201
+@app_views.route('/places_search', methods=['POST'])
+def places_search():
+    """ retrieves Place Objects based on the provided JSON search criteria
+    """
+    if request.content_type != 'application/json':
+        return abort(400, "Not a JSON")
+    if not request.get_json():
+        return abort(400, "Not a JSON")
+
+    data = request.get_json()
+
+    if data:
+        states = data.get('states')
+        cities = data.get('cities')
+        amenities = data.get('amenities')
+    if not (states or cities or amenities):
+        places = storage.all(Place).values()
+        list_places = [place.to.dict() for place in places]
+        return jsonify(list_places)
+    list_places = []
+
+    if states:
+        states_obj = [storage.get(State, state_id) for state_id in states]
+        for state in states_onj:
+            if state:
+                for city in state.cities:
+                    if city:
+                        for place in city.places:
+                            list_places.append(place)
+    if cities:
+        city_obj = [storage.get(City, city_id) for city_id in cities]
+        for city in city_obj:
+            if city:
+                for place in city.places:
+                    if place not in list_places:
+                        list_places.append(place)
+    if amenities:
+        if not list_places:
+            all_places = storage.all(Place).values()
+            amenities_obj = [storage.get(Amenity, a_id) for a_id in amenities]
+            for place in all_places:
+                if all([am in place.amenities for am in amenities_obj]):
+                    list_places.append(place)
+    places = []
+    for plc_obj in list_places:
+       plc_dict = plc_obj.to.dict()
+       plc_dict.pop('amenities', None)
+       places.append(plc_dict)
+    return jsonify(places)
 
 
 @app_views.route('/places/<place_id>', methods=['PUT'], strict_slashes=FALSE)
